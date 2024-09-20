@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/arm/src/xmc4/xmc4_gpio.h
+ * arch/arm/src/xmc4/xmc4_eru.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -25,6 +25,7 @@
 #include <nuttx/config.h>
 
 #include "hardware/xmc4_eru.h"
+#include "hardware/xmc4_eru_pinmap.h"
 
 /****************************************************************************
  * Public Types
@@ -74,10 +75,54 @@ typedef enum xmc4_eru_etl_edge
   XMC_ERU_ETL_EDGE_DETECTION_BOTH = 3U      /* detection of either edges generates the event */
 } xmc4_eru_etl_edge_t;
 
+typedef enum xmc4_eru_etl_output_trigger_channel
+{
+  XMC_ERU_ETL_OUTPUT_TRIGGER_OGU0 = 0U, /* Event from input ETLx triggers output OGU0 */
+  XMC_ERU_ETL_OUTPUT_TRIGGER_OGU1 = 1U, /* Event from input ETLx triggers output OGU1 */
+  XMC_ERU_ETL_OUTPUT_TRIGGER_OGU2 = 2U, /* Event from input ETLx triggers output OGU2 */
+  XMC_ERU_ETL_OUTPUT_TRIGGER_OGU3 = 3U, /* Event from input ETLx triggers output OGU3 */
+} xmc4_eru_etl_output_trigger_channel_t;
+
+typedef enum xmc4_eru_etl_status_flag_mode
+{
+  XMC_ERU_ETL_STATUS_FLAG_MODE_SWCTRL = 0U,
+  XMC_ERU_ETL_STATUS_FLAG_MODE_HWCTRL = 1U
+} xmc4_eru_etl_status_flag_mode_t;
+
+typedef enum xmc4_eru_ogu_service_request
+{
+  XMC_ERU_OGU_SERVICE_REQUEST_DISABLED = 0U,
+  XMC_ERU_OGU_SERVICE_REQUEST_ON_TRIGGER = 1U,
+  XMC_ERU_OGU_SERVICE_REQUEST_ON_TRIGGER_AND_PATTERN_MATCH = 2U,
+  XMC_ERU_OGU_SERVICE_REQUEST_ON_TRIGGER_AND_PATTERN_MISMATCH = 3U
+} xmc4_eru_ogu_service_request_t;
+
+typedef struct xmc4_eru_etl_config
+{
+      uint8_t input_a;
+      uint8_t input_b;
+      bool enable_output_trigger;
+      bool status_flag_mode;
+      uint8_t edge_detection;
+      uint8_t output_trigger_channel;
+      uint8_t source;
+
+} xmc4_eru_etl_config_t;
+
+typedef struct xmc4_eru_ogu_config
+{
+    uint8_t peripheral_trigger;
+    bool enable_pattern_detection;
+    uint8_t service_request;
+    uint8_t pattern_detection_input;
+} xmc4_eru_ogu_config_t;
+
 /****************************************************************************
  * Public Functions Prototypes
  ****************************************************************************/
 void xmc4_eru_enable(xmc4_eru_t const eru);
-void xmc4_eru_disable(XMC_ERU_t *const eru);
-int xmc4_eru_etl_initialize(XMC_ERU_t const eru, const uint8_t channel, const uint32_t config_input);
-int xmc4_eru_ogu_initialize(XMC_ERU_t const eru, const uint8_t channel, const uint32_t config_input);
+void xmc4_eru_disable(xmc4_eru_t const eru);
+int xmc4_eru_etl_initialize(xmc4_eru_t const eru, const uint8_t channel, const xmc4_eru_etl_config_t *const config_etl);
+int xmc4_eru_ogu_initialize(xmc4_eru_t const eru, const uint8_t channel, const xmc4_eru_ogu_config_t *const config_ogu);
+void xmc4_eru_etl_clear_status_flag(xmc4_eru_t const eru, const uint8_t channel);
+bool xmc4_eru_etl_get_status_flag(xmc4_eru_t const eru, const uint8_t channel);

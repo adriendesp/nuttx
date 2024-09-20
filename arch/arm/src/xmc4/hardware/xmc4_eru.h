@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/arm/src/xmc4/hardware/xmc4_posif.h
+ * arch/arm/src/xmc4/hardware/xmc4_eru.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -146,3 +146,5 @@
 #define ERU_EXOCON_IPEN2_MASK      (0x4000UL)
 #define ERU_EXOCON_IPEN3_SHIFT     (15UL)         /* (Bit 15) Pattern Detection Enable for ETL3 */
 #define ERU_EXOCON_IPEN3_MASK      (0x8000UL)
+
+#endif /* __ARCH_ARM_SRC_XMC4_HARDWARE_XMC4_ERU_H */

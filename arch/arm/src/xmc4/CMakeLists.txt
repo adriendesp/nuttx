@@ -33,6 +33,7 @@ list(
   xmc4_serial.c
   xmc4_start.c
   xmc4_usic.c
+  xmc4_eru.c
   xmc4_timerisr.c)
 
 if(CONFIG_BUILD_PROTECTED)

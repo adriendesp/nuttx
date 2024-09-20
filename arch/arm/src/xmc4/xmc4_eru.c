@@ -1,4 +1,6 @@
-*****************************************************************************arch / arm / src / xmc4 / xmc4_ccu4.c **Licensed to the Apache Software Foundation(ASF) under one or more
+/*****************************************************************************
+ * arch / arm / src / xmc4 / xmc4_eru.c
+ * Licensed to the Apache Software Foundation(ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
  * ASF licenses this file to you under the Apache License, Version 2.0 (the
@@ -16,14 +18,6 @@
  ****************************************************************************/
 
 /****************************************************************************
- * XMC CCU Driver
- *
- * For now, this file contains only helper methods mandatory for xmc tickless
- * feature. Contibutions are welcomed.
- *
- ****************************************************************************/
-
-/****************************************************************************
  * Included Files
  ****************************************************************************/
 
@@ -37,6 +31,7 @@
 #include "arm_internal.h"
 #include "hardware/xmc4_eru.h"
 #include "xmc4_eru.h"
+#include "hardware/xmc4_scu.h"
 
 /****************************************************************************
  * Private Datas
@@ -82,7 +77,7 @@ void xmc4_eru_enable(xmc4_eru_t const eru)
  *  Disable the clock and Reset the ERU module.
  *
  ****************************************************************************/
-void xmc4_eru_disable(XMC_ERU_t *const eru)
+void xmc4_eru_disable(xmc4_eru_t const eru)
 {
     if (eru == XMC_ERU1)
     {
@@ -105,58 +100,71 @@ void xmc4_eru_disable(XMC_ERU_t *const eru)
  *  Initializes the selected ERU ETLx channel.
  *
  ****************************************************************************/
-int xmc4_eru_etl_initialize(XMC_ERU_t const eru, const uint8_t channel, const uint32_t config_input)
+int xmc4_eru_etl_initialize(xmc4_eru_t const eru, const uint8_t channel, const xmc4_eru_etl_config_t *const config_etl)
 {
     if (channel > 3)
     {
         return -EINVAL;
     }
 
-    /* EXICONx CONFIG
-     * enable_output_trigger:  0      (disabled) Enables the generation of trigger pulse(PE), for the configured edge detection.
-     * status_flag_mode:       0      (sticky flag) Enables the status flag auto clear(LD), for the opposite edge of the configured event edge.
-     * rising_edge_detection:  0x01 (RE) Configure the event trigger edge(FE, RE).
-     * output_trigger_channel: 0x000  (OGU1) Output channel select(OCS) for ETLx output trigger pulse.
-     * source:                 0x0000 Input path combination along with polarity for event generation.
-     */
-    uint32_t exiconx = 0;
-    exiconx |= (uint32_t)(0 << ERU_EXICON_PE_SHIFT);
-    exiconx |= (uint32_t)(0 << ERU_EXICON_LD_SHIFT);
-    exiconx |= (uint32_t)(XMC_ERU_ETL_EDGE_DETECTION_DISABLED << ERU_EXICON_RE_SHIFT);
-    exiconx |= (uint32_t)(0 << ERU_EXICON_OCS_SHIFT);
-    exiconx |= (uint32_t)(XMC_ERU_ETL_SOURCE_A << ERU_EXICON_SS_SHIFT);
-
-    /* Defines input signal for path A or B of ERSx(Event request source, x = [0 to 3]) unit. */
-
-    xmc4_eru_enable(eru);
+    uint32_t exisel_regaddr = 0;
 
     if (eru == XMC_ERU0)
     {
-        /* Config EXISEL */
-        uint32_t exisel = getreg32(XMC4_ERU0_EXISEL);
-        uint32_t channel_mask = (uint32_t)((ERU_EXISEL_EXS0A_MASK | ERU_EXISEL_EXS0B_MASK) << (channel * 4UL));
-        exisel &= ~channel_mask;
-        exisel |= (uint32_t)(config_input << (channel * 4UL));
-        putreg32(exisel, XMC4_ERU0_EXISEL);
-
-        /* Configure channel x EXICONx */
-        uint8_t exiconx_regaddr = (uint32_t)(XMC4_ERU0_EXICON0 + channel * 0x04);
-        putreg32(exiconx, exiconx_regaddr);
+        exisel_regaddr = (uint32_t)XMC4_ERU0_EXISEL;
     }
     else if (eru == XMC_ERU1)
     {
-        /* Config EXISEL */
-        uint32_t exisel = getreg32(XMC4_ERU1_EXISEL);
-        uint32_t channel_mask = (uint32_t)((ERU_EXISEL_EXS0A_MASK | ERU_EXISEL_EXS0B_MASK) << (channel * 4UL));
-        exisel &= ~channel_mask;
-        exisel |= (uint32_t)(config_input << (channel * 4UL));
-        putreg32(exisel, XMC4_ERU1_EXISEL);
-
-        /* Configure channel x EXICONx */
-        uint8_t exiconx_regaddr = (uint32_t)(XMC4_ERU1_EXICON0 + channel * 0x04);
-        uint32_t exiconx = 0; /* Need config here */
-        putreg32(exiconx, exiconx_regaddr);
+        exisel_regaddr = (uint32_t)XMC4_ERU1_EXISEL;
     }
+    else
+    {
+        return -EINVAL;
+    }
+
+    uint32_t exiconx_regaddr = 0;
+
+    if (eru == XMC_ERU0)
+    {
+        exiconx_regaddr = (uint32_t)(XMC4_ERU0_EXICON0 + channel * 0x04);
+    }
+    else if (eru == XMC_ERU1)
+    {
+        exiconx_regaddr = (uint32_t)(XMC4_ERU1_EXICON0 + channel * 0x04);
+    }
+    else
+    {
+        return -EINVAL;
+    }
+
+    /* EXICONx CONFIG
+     * enable_output_trigger : Enables the generation of trigger pulse(PE), for the configured edge detection.
+     * status_flag_mode:       Enables the status flag auto clear(LD), for the opposite edge of the configured event edge.
+     * rising_edge_detection:  Configure the event trigger edge(FE, RE).
+     * output_trigger_channel: Output OGUy select(OCS) for ETLx output trigger pulse.
+     * source:                 Input path combination along with polarity for event generation.
+     */
+
+    uint32_t exiconx = 0;
+    exiconx |= (uint32_t)(config_etl->enable_output_trigger << ERU_EXICON_PE_SHIFT);
+    exiconx |= (uint32_t)(config_etl->status_flag_mode << ERU_EXICON_LD_SHIFT);
+    exiconx |= (uint32_t)(config_etl->edge_detection << ERU_EXICON_RE_SHIFT);
+    exiconx |= (uint32_t)(config_etl->output_trigger_channel << ERU_EXICON_OCS_SHIFT);
+    exiconx |= (uint32_t)(config_etl->source << ERU_EXICON_SS_SHIFT);
+
+    uint32_t config_input = (uint32_t)(config_etl->input_a);
+    config_input |= (uint32_t)(config_etl->input_b << 2);
+
+    xmc4_eru_enable(eru);
+
+    /* Config EXISEL */
+
+    uint32_t channel_mask = (uint32_t)((ERU_EXISEL_EXS0A_MASK | ERU_EXISEL_EXS0B_MASK) << (channel * 4UL));
+    modifyreg32(exisel_regaddr, channel_mask, (uint32_t)(config_input << (channel * 4UL)));
+
+    /* Configure channel x EXICONx */
+
+    putreg32(exiconx, exiconx_regaddr, );
 
     return OK;
 }
@@ -168,9 +176,24 @@ int xmc4_eru_etl_initialize(XMC_ERU_t const eru, const uint8_t channel, const ui
  *  Initializes the selected ERU ETLx channel.
  *
  ****************************************************************************/
-int xmc4_eru_ogu_initialize(XMC_ERU_t const eru, const uint8_t channel, const uint32_t config_input)
+int xmc4_eru_ogu_initialize(xmc4_eru_t const eru, const uint8_t channel, const xmc4_eru_ogu_config_t *const config_ogu)
 {
     if (channel > 3)
+    {
+        return -EINVAL;
+    }
+
+    uint32_t exoconx_regaddr = 0;
+
+    if (eru == XMC_ERU0)
+    {
+        exoconx_regaddr = (uint32_t)(XMC4_ERU0_EXOCON0 + channel * 0x04);
+    }
+    else if (eru == XMC_ERU1)
+    {
+        exoconx_regaddr = (uint32_t)(XMC4_ERU1_EXOCON0 + channel * 0x04);
+    }
+    else
     {
         return -EINVAL;
     }
@@ -183,24 +206,56 @@ int xmc4_eru_ogu_initialize(XMC_ERU_t const eru, const uint8_t channel, const ui
      */
 
     uint32_t exoconx = 0;
+    exoconx |= (uint32_t)(config_ogu->peripheral_trigger << ERU_EXOCON_ISS_SHIFT);
+    exoconx |= (uint32_t)(config_ogu->enable_pattern_detection << ERU_EXOCON_GEEN_SHIFT);
+    exoconx |= (uint32_t)(config_ogu->service_request << ERU_EXOCON_GP_SHIFT);
+    exoconx |= (uint32_t)(config_ogu->pattern_detection_input << ERU_EXOCON_IPEN0_SHIFT);
 
+    putreg32(exoconx, exoconx_regaddr);
 
-    /* Defines input signal for path A or B of ERSx(Event request source, x = [0 to 3]) unit. */
+    return OK;
+}
+
+void xmc4_eru_etl_clear_status_flag(xmc4_eru_t const eru, const uint8_t channel)
+{
+    uint32_t exoconx_regaddr = 0;
 
     if (eru == XMC_ERU0)
     {
-        /* Configure channel x EXOCONx */
-        uint8_t exoconx_regaddr = (uint32_t)(XMC4_ERU0_EXOCON0 + channel * 0x04);
-        uint32_t exoconx = 0; /* Need config here */
-        putreg32(exoconx, exoconx_regaddr);
+        exoconx_regaddr = (uint32_t)(XMC4_ERU0_EXOCON0 + channel * 0x04);
     }
     else if (eru == XMC_ERU1)
     {
-        /* Configure channel x EXOCONx */
-        uint8_t exoconx_regaddr = (uint32_t)(XMC4_ERU1_EXOCON0 + channel * 0x04);
-        uint32_t exoconx = 0; /* Need config here */
-        putreg32(exoconx, exoconx_regaddr);
+        exoconx_regaddr = (uint32_t)(XMC4_ERU1_EXOCON0 + channel * 0x04);
+    }
+    else
+    {
+        return -EINVAL;
     }
 
-    return OK;
+    /* Set EXICONx.FL to 0 */
+
+    modifyreg32(exiconx_regaddr, (uint32_t)ERU_EXICON_FL_MASK, 0);
+}
+
+bool xmc4_eru_etl_get_status_flag(xmc4_eru_t const eru, const uint8_t channel)
+{
+    uint32_t exoconx_regaddr = 0;
+
+    if (eru == XMC_ERU0)
+    {
+        exoconx_regaddr = (uint32_t)(XMC4_ERU0_EXOCON0 + channel * 0x04);
+    }
+    else if (eru == XMC_ERU1)
+    {
+        exoconx_regaddr = (uint32_t)(XMC4_ERU1_EXOCON0 + channel * 0x04);
+    }
+    else
+    {
+        return -EINVAL;
+    }
+
+    /* Get EXICONx.FL */
+
+    return ((getreg32(exiconx_regaddr) & ERU_EXICON_FL_MASK) != 0);
 }
